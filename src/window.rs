@@ -4,7 +4,6 @@ const WIDTH: usize = 64;
 const HEIGHT: usize = 32;
 
 pub struct Chip8Window {
-    pub buffer: [u32; WIDTH * HEIGHT],
     window: Window,
 }
 
@@ -24,7 +23,6 @@ impl Chip8Window {
         window.set_target_fps(0);
 
         Self {
-            buffer: [0; WIDTH * HEIGHT],
             window
         }
 
@@ -34,9 +32,9 @@ impl Chip8Window {
         self.window.is_open()
     }
 
-    pub fn update(&mut self) {
+    pub fn update(&mut self, buffer: &[u32; WIDTH * HEIGHT]) {
         self.window
-            .update_with_buffer(&self.buffer, WIDTH, HEIGHT)
+            .update_with_buffer(buffer, WIDTH, HEIGHT)
             .unwrap();
     }
 }
