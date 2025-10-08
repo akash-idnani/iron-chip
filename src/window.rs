@@ -13,10 +13,7 @@ impl Chip8Window {
             "Iron Chip",
             WIDTH,
             HEIGHT,
-            WindowOptions {
-                scale: Scale::X16,
-                ..Default::default()
-            },
+            WindowOptions { scale: Scale::X16, ..Default::default() },
         )
         .unwrap();
 
@@ -31,8 +28,6 @@ impl Chip8Window {
     }
 
     pub fn update(&mut self, buffer: &[u32; WIDTH * HEIGHT]) {
-        self.window
-            .update_with_buffer(buffer, WIDTH, HEIGHT)
-            .unwrap();
+        self.window.update_with_buffer(buffer, WIDTH, HEIGHT).unwrap();
     }
 }

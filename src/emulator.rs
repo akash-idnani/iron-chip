@@ -105,53 +105,44 @@ impl Chip8Emulator {
         self.program_counter += 2;
 
         let decoded_instruction = Chip8Emulator::decode(instruction);
+        let DecodedInstruction {
+            first_nibble,
+            x_register,
+            y_register,
+            n_4_bit_constant,
+            nn_8_bit_constant,
+            nnn_12_bit_address,
+            raw_instruction,
+        } = decoded_instruction;
 
         match decoded_instruction {
             //00E0: Clears the screen
-            DecodedInstruction {
-                raw_instruction: 0x00E0,
-                ..
-            } => {
+            DecodedInstruction { raw_instruction: 0x00E0, .. } => {
                 self.display_buffer.fill(0);
                 debug!("0x00E0: Clearing display buffer");
             }
 
             // 1NNN: Jump to address NNN
-            DecodedInstruction {
-                first_nibble: 0x1,
-                nnn_12_bit_address,
-                raw_instruction,
-                ..
-            } => {
+            DecodedInstruction { first_nibble: 0x1, .. } => {
                 self.program_counter = nnn_12_bit_address;
                 debug!("{raw_instruction:#X}: Jumping to address {nnn_12_bit_address:#3X}");
             }
 
             // 2NNN: Calls subroutine at NNN.
-            DecodedInstruction {
-                first_nibble: 0x2,
-                nnn_12_bit_address,
-                raw_instruction,
-                ..
-            } => {
+            DecodedInstruction { first_nibble: 0x2, .. } => {
                 self.stack[self.stack_pointer as usize] = self.program_counter;
                 self.stack_pointer += 1;
 
                 self.program_counter = nnn_12_bit_address;
 
-                debug!("{raw_instruction:#X}: Calling subroutine at address {nnn_12_bit_address:#3X}");
+                debug!(
+                    "{raw_instruction:#X}: Calling subroutine at address {nnn_12_bit_address:#3X}"
+                );
             }
-
 
             // 3XNN: Skips the next instruction if VX equals NN
             // (usually the next instruction is a jump to skip a code block).
-            DecodedInstruction {
-                first_nibble: 0x3,
-                x_register,
-                nn_8_bit_constant,
-                raw_instruction,
-                ..
-            } => {
+            DecodedInstruction { first_nibble: 0x3, .. } => {
                 if self.registers[x_register as usize] == nn_8_bit_constant {
                     self.program_counter += 2;
                     debug!("{raw_instruction:#X}: Skipping because register {x_register} == {nn_8_bit_constant}");
@@ -161,36 +152,19 @@ impl Chip8Emulator {
             }
 
             // 6XNN: Sets VX to NN
-            DecodedInstruction {
-                first_nibble: 0x6,
-                x_register,
-                nn_8_bit_constant,
-                raw_instruction,
-                ..
-            } => {
+            DecodedInstruction { first_nibble: 0x6, .. } => {
                 self.registers[x_register as usize] = nn_8_bit_constant;
                 debug!("{raw_instruction:#X}: Setting register {x_register} to {nn_8_bit_constant:#2X}");
             }
 
             // 7XNN: Adds NN to VX (carry flag is not changed)
-            DecodedInstruction {
-                first_nibble: 0x7,
-                x_register,
-                nn_8_bit_constant,
-                raw_instruction,
-                ..
-            } => {
+            DecodedInstruction { first_nibble: 0x7, .. } => {
                 self.registers[x_register as usize] += nn_8_bit_constant;
                 debug!("{raw_instruction:#X}: Adding {nn_8_bit_constant} to register {x_register}");
             }
 
             // AXNN: Sets I to the address NNN.
-            DecodedInstruction {
-                first_nibble: 0xA,
-                nnn_12_bit_address,
-                raw_instruction,
-                ..
-            } => {
+            DecodedInstruction { first_nibble: 0xA, .. } => {
                 self.index_register = nnn_12_bit_address;
                 debug!("{raw_instruction:#X}: Setting index register to {nnn_12_bit_address:#3X}");
             }
@@ -201,14 +175,7 @@ impl Chip8Emulator {
             // I value does not change after the execution of this instruction.
             // As described above, VF is set to 1 if any screen pixels are flipped from set
             // to unset when the sprite is drawn, and to 0 if that does not happen
-            DecodedInstruction {
-                first_nibble: 0xD,
-                x_register,
-                y_register,
-                n_4_bit_constant,
-                raw_instruction,
-                ..
-            } => {
+            DecodedInstruction { first_nibble: 0xD, .. } => {
                 let x = self.registers[x_register as usize] as usize;
                 let y = self.registers[y_register as usize] as usize;
                 let height = n_4_bit_constant as usize;
@@ -244,13 +211,7 @@ impl Chip8Emulator {
             }
 
             // FX1E: Adds VX to I. VF is not affected.
-            DecodedInstruction {
-                first_nibble: 0xF,
-                nn_8_bit_constant: 0x1E,
-                x_register,
-                raw_instruction,
-                ..
-            } => {
+            DecodedInstruction { first_nibble: 0xF, nn_8_bit_constant: 0x1E, .. } => {
                 self.index_register += self.registers[x_register as usize] as u16;
                 debug!("{raw_instruction:#X}: Adding register {x_register} to index");
             }
@@ -312,10 +273,7 @@ mod test {
 
         // Check the markers
         assert_eq!(emulator.ram[PROGRAM_START_ADDRESS as usize], 42);
-        assert_eq!(
-            emulator.ram[PROGRAM_START_ADDRESS as usize + PROGRAM_MAX_SIZE - 1],
-            69
-        );
+        assert_eq!(emulator.ram[PROGRAM_START_ADDRESS as usize + PROGRAM_MAX_SIZE - 1], 69);
     }
 
     #[test]
@@ -456,7 +414,7 @@ mod test {
         let program = vec![
             0xA1, 0x23, // Set index register to 0x123
             0x65, 0x02, // Set register 5 to 0x02
-            0xF5, 0x1E  // Adds register 5 to index register
+            0xF5, 0x1E, // Adds register 5 to index register
         ];
 
         let mut emulator = Chip8Emulator::new(program, 10);

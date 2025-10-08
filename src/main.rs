@@ -40,10 +40,7 @@ fn main() {
         let current_runtime = Instant::now().duration_since(frame_start_time);
 
         if current_runtime >= INTERVAL {
-            trace!(
-                "WARNING: Exceeded 60Hz Frame! Runtime: {:?}",
-                current_runtime
-            );
+            trace!("WARNING: Exceeded 60Hz Frame! Runtime: {:?}", current_runtime);
         } else {
             sleep(INTERVAL - current_runtime);
         }
