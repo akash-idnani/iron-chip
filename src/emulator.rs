@@ -107,17 +107,10 @@ impl Chip8Emulator {
         self.program_counter += 2;
 
         let decoded_instruction = Chip8Emulator::decode(instruction);
+
         match decoded_instruction {
             DecodedInstruction {
-                first_nibble: 0x1,
-                nnn_12_bit_address,
-                raw_instruction,
-                ..
-            } => {
-                self.program_counter = nnn_12_bit_address;
-                debug!("{raw_instruction:#X}: Jumping to address {nnn_12_bit_address:#3X}");
-            }
-            DecodedInstruction {
+                //00E0: Clears the screen
                 raw_instruction: 0x00E0,
                 ..
             } => {
@@ -127,6 +120,18 @@ impl Chip8Emulator {
             }
 
             DecodedInstruction {
+                // 1NNN: Jump to address NNN
+                first_nibble: 0x1,
+                nnn_12_bit_address,
+                raw_instruction,
+                ..
+            } => {
+                self.program_counter = nnn_12_bit_address;
+                debug!("{raw_instruction:#X}: Jumping to address {nnn_12_bit_address:#3X}");
+            }
+
+            DecodedInstruction {
+                // 6XNN: Sets VX to NN
                 first_nibble: 0x6,
                 x_register,
                 nn_8_bit_constant,
@@ -138,6 +143,7 @@ impl Chip8Emulator {
             }
 
             DecodedInstruction {
+                // 7XNN: Adds NN to VX (carry flag is not changed)
                 first_nibble: 0x7,
                 x_register,
                 nn_8_bit_constant,
@@ -158,6 +164,11 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: Setting index register to {nnn_12_bit_address:#3X}");
             }
 
+            // Draws a sprite at coordinate (VX, VY) that has a width of 8 pixels and a height of N pixels.
+            // Each row of 8 pixels is read as bit-coded starting from memory location I;
+            // I value does not change after the execution of this instruction.
+            // As described above, VF is set to 1 if any screen pixels are flipped from set
+            // to unset when the sprite is drawn, and to 0 if that does not happen
             DecodedInstruction {
                 first_nibble: 0xD,
                 x_register,
@@ -167,15 +178,16 @@ impl Chip8Emulator {
                 ..
             } => {
                 let x = self.registers[x_register as usize] as usize;
-                let y= self.registers[y_register as usize] as usize;
+                let y = self.registers[y_register as usize] as usize;
                 let height = n_4_bit_constant as usize;
 
                 let mut collision_detected = false;
 
                 for y_counter in 0..height {
                     for x_counter in 0..8 {
-                        let x_counter = 7 - x_counter;
-                        let is_pixel_on = (self.ram[self.index_register as usize + y_counter] & (1 << x_counter)) != 0;
+                        let is_pixel_on = (self.ram[self.index_register as usize + y_counter]
+                            & (0x80 >> x_counter))
+                            != 0;
 
                         let dest_address = (y_counter + y) * WIDTH + (x_counter + x);
                         let is_already_on = self.display_buffer[dest_address] != 0;
@@ -193,7 +205,6 @@ impl Chip8Emulator {
                 if collision_detected {
                     self.registers[0xF] = 1;
                 }
-
 
                 debug!("{raw_instruction:#X}: Drawing sprite at address {:#3X} of height {height} to ({x}, {y}). Collision Detected: {collision_detected}",
                     self.index_register);
@@ -240,7 +251,7 @@ mod test {
         rom[0] = 42;
         rom[PROGRAM_MAX_SIZE - 1] = 69;
 
-        let emulator = Chip8Emulator::new(rom);
+        let emulator = Chip8Emulator::new(rom, 10);
 
         // Check some font values
         assert_eq!(emulator.ram[0x50], 0xF0);
@@ -257,6 +268,89 @@ mod test {
     #[test]
     #[should_panic(expected = "PROGRAM_MAX_SIZE")]
     fn test_emulator_too_large_rom_fails() {
-        Chip8Emulator::new(vec![0; PROGRAM_MAX_SIZE + 1]);
+        Chip8Emulator::new(vec![0; PROGRAM_MAX_SIZE + 1], 10);
+    }
+
+    #[test]
+    fn test_00e0() {
+        let mut emulator = Chip8Emulator::new(vec![0x00, 0xE0], 10);
+
+        emulator.display_buffer.fill(69);
+        emulator.run_instruction();
+
+        assert!(emulator.display_buffer.iter().all(|i| *i == 0));
+    }
+
+    #[test]
+    fn test_1nnn() {
+        let mut emulator = Chip8Emulator::new(vec![0x12, 0x34], 10);
+        emulator.run_instruction();
+        assert_eq!(emulator.program_counter, 0x234);
+    }
+
+    #[test]
+    fn test_6xnn() {
+        let mut emulator = Chip8Emulator::new(vec![0x60, 0x12, 0x6e, 0x34], 10);
+
+        emulator.run_instruction();
+        assert_eq!(emulator.registers[0], 0x12);
+
+        emulator.run_instruction();
+        assert_eq!(emulator.registers[0xe], 0x34);
+    }
+
+    #[test]
+    fn test_7xnn() {
+        let mut emulator = Chip8Emulator::new(vec![0x71, 0x01, 0x71, 0x02], 10);
+
+        emulator.run_instruction();
+        assert_eq!(emulator.registers[1], 0x1);
+
+        emulator.run_instruction();
+        assert_eq!(emulator.registers[1], 0x3);
+    }
+
+    #[test]
+    fn test_dxyn() {
+        let program: Vec<u8> = vec![
+            0x60, 1, // Set register 0 to 1
+            0x61, 2, // Set register 1 to 2
+            0xA2, 0x08, // Set index register to 0x208
+            0xD0, 0x12,       // Display to location (1, 2), height 2
+            0xFF,       // Bitmask row 1
+            0b10101010, // Bitmask row 2
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+        emulator.run_instruction();
+        emulator.run_instruction();
+        emulator.run_instruction();
+        emulator.run_instruction();
+
+        assert_eq!(emulator.display_buffer[2 * WIDTH], 0);
+
+        assert_ne!(emulator.display_buffer[2 * WIDTH + 1], 0);
+        assert_ne!(emulator.display_buffer[2 * WIDTH + 2], 0);
+        assert_ne!(emulator.display_buffer[2 * WIDTH + 3], 0);
+        assert_ne!(emulator.display_buffer[2 * WIDTH + 4], 0);
+        assert_ne!(emulator.display_buffer[2 * WIDTH + 5], 0);
+        assert_ne!(emulator.display_buffer[2 * WIDTH + 6], 0);
+        assert_ne!(emulator.display_buffer[2 * WIDTH + 7], 0);
+        assert_ne!(emulator.display_buffer[2 * WIDTH + 8], 0);
+
+        assert_eq!(emulator.display_buffer[2 * WIDTH + 9], 0);
+
+        assert_eq!(emulator.display_buffer[3 * WIDTH], 0);
+
+        assert_eq!(emulator.display_buffer[3 * WIDTH + 1], 0);
+        assert_ne!(emulator.display_buffer[2 * WIDTH + 2], 0);
+        assert_ne!(emulator.display_buffer[2 * WIDTH + 3], 0);
+        assert_ne!(emulator.display_buffer[2 * WIDTH + 4], 0);
+        assert_ne!(emulator.display_buffer[2 * WIDTH + 5], 0);
+        assert_ne!(emulator.display_buffer[2 * WIDTH + 6], 0);
+        assert_ne!(emulator.display_buffer[2 * WIDTH + 7], 0);
+        assert_ne!(emulator.display_buffer[2 * WIDTH + 8], 0);
+
+        assert_eq!(emulator.display_buffer[2 * WIDTH + 9], 0);
     }
 }
