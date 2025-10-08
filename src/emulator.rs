@@ -127,6 +127,22 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: Jumping to address {nnn_12_bit_address:#3X}");
             }
 
+            // 2NNN: Calls subroutine at NNN.
+            DecodedInstruction {
+                first_nibble: 0x2,
+                nnn_12_bit_address,
+                raw_instruction,
+                ..
+            } => {
+                self.stack[self.stack_pointer as usize] = self.program_counter;
+                self.stack_pointer += 1;
+
+                self.program_counter = nnn_12_bit_address;
+
+                debug!("{raw_instruction:#X}: Calling subroutine at address {nnn_12_bit_address:#3X}");
+            }
+
+
             // 3XNN: Skips the next instruction if VX equals NN
             // (usually the next instruction is a jump to skip a code block).
             DecodedInstruction {
@@ -310,6 +326,16 @@ mod test {
         let mut emulator = Chip8Emulator::new(vec![0x12, 0x34], 10);
         emulator.run_instruction();
         assert_eq!(emulator.program_counter, 0x234);
+    }
+
+    #[test]
+    fn test_2nnn() {
+        let mut emulator = Chip8Emulator::new(vec![0x21, 0x23], 10);
+        emulator.run_instruction();
+
+        assert_eq!(emulator.program_counter, 0x123);
+        assert_eq!(emulator.stack_pointer, 1);
+        assert_eq!(emulator.stack[0], 0x202);
     }
 
     #[test]
