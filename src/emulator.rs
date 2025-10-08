@@ -163,6 +163,18 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: Adding {nn_8_bit_constant} to register {x_register}");
             }
 
+            // 8XY4: Adds VY to VX. VF is set to 1 when there's an overflow, and to 0 when there is not.
+            DecodedInstruction { first_nibble: 0x8, n_4_bit_constant: 0x4, .. } => {
+                let x_value = self.registers[x_register as usize];
+                let y_value = self.registers[y_register as usize];
+                let (result_value, overflow) = x_value.overflowing_add(y_value);
+
+                self.registers[x_register as usize] = result_value;
+                self.registers[0xF] = if overflow { 1 } else { 0 };
+
+                debug!("{raw_instruction:#X}: V{x_register} += V{y_register} - Overflow: {overflow}");
+            }
+
             // AXNN: Sets I to the address NNN.
             DecodedInstruction { first_nibble: 0xA, .. } => {
                 self.index_register = nnn_12_bit_address;
@@ -214,6 +226,16 @@ impl Chip8Emulator {
             DecodedInstruction { first_nibble: 0xF, nn_8_bit_constant: 0x1E, .. } => {
                 self.index_register += self.registers[x_register as usize] as u16;
                 debug!("{raw_instruction:#X}: Adding register {x_register} to index");
+            }
+
+            // FX65: Fills from V0 to VX (including VX) with values from memory, starting at address I.
+            // The offset from I is increased by 1 for each value read, but I itself is left unmodified
+            DecodedInstruction { first_nibble: 0xF, nn_8_bit_constant: 0x65, .. } => {
+                for i in 0..=x_register as usize {
+                    self.registers[i] = self.ram[self.index_register as usize + i];
+                }
+
+                debug!("{raw_instruction:#X}: Filling V0 - V{x_register} from location {:#X}", self.index_register);
             }
 
             _ => {
@@ -349,6 +371,29 @@ mod test {
     }
 
     #[test]
+    fn test_8xy4() {
+        let program = vec![
+            0x66, 254,  // Set register 6 to 254
+            0x67, 1,    // Set register 7 to 1
+            0x86, 0x74, // V6 += V7, should be 255 and not overflow
+            0x86, 0x74, // V6 += V7, should be 0 and overflow
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+        emulator.run_instruction();
+        emulator.run_instruction();
+        emulator.run_instruction();
+
+        assert_eq!(emulator.registers[6], 255);
+        assert_eq!(emulator.registers[0xF], 0); // Overflow not set
+
+        emulator.run_instruction();
+
+        assert_eq!(emulator.registers[6], 0);
+        assert_eq!(emulator.registers[0xF], 1); // Overflow set
+    }
+
+    #[test]
     fn test_dxyn() {
         let program: Vec<u8> = vec![
             0x60, 1, // Set register 0 to 1
@@ -422,5 +467,28 @@ mod test {
             emulator.run_instruction();
         }
         assert_eq!(emulator.index_register, 0x125);
+    }
+
+    #[test]
+    fn test_fx65() {
+        let program = vec![
+            0xF5, 0x65, // memcpy ram[index_register] to V0-V5
+            0x50, 0x51, 0x52, 0x53, 0x54, 0x55,
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+        emulator.index_register = 0x202;
+        emulator.run_instruction();
+
+        for i in 0..=5 {
+            assert_eq!(emulator.registers[i] as usize, 0x50 + i);
+        }
+
+        for i in 6..=0xF {
+            assert_eq!(emulator.registers[i], 0);
+        }
+
+        // Index register should not change. There is some conflicting info on this online
+        assert_eq!(emulator.index_register, 0x202);
     }
 }
