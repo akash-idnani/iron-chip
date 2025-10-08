@@ -1,7 +1,10 @@
+use std::fs;
+use std::path::PathBuf;
 use crate::emulator::Chip8Emulator;
 use crate::window::Chip8Window;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
+use clap::Parser;
 
 mod emulator;
 mod window;
@@ -9,12 +12,21 @@ mod window;
 extern crate pretty_env_logger;
 #[macro_use] extern crate log;
 
+#[derive(Parser, Debug)]
+struct Args {
+    #[arg(long, value_name = "FILE")]
+    rom_file: PathBuf,
+}
+
 fn main() {
     pretty_env_logger::init();
     info!("Starting Emulator");
 
+    let args = Args::parse();
+    let rom_data = fs::read(args.rom_file).expect("Couldn't read ROM");
+
     let mut window = Chip8Window::new();
-    let mut emulator = Chip8Emulator::new(Vec::new(), 12);
+    let mut emulator = Chip8Emulator::new(rom_data, 12);
 
     const INTERVAL: Duration = Duration::from_micros(16667); // 60Hz
 
