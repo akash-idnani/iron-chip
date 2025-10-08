@@ -243,6 +243,18 @@ impl Chip8Emulator {
                     self.index_register);
             }
 
+            // FX1E: Adds VX to I. VF is not affected.
+            DecodedInstruction {
+                first_nibble: 0xF,
+                nn_8_bit_constant: 0x1E,
+                x_register,
+                raw_instruction,
+                ..
+            } => {
+                self.index_register += self.registers[x_register as usize] as u16;
+                debug!("{raw_instruction:#X}: Adding register {x_register} to index");
+            }
+
             _ => {
                 error!(
                     "Unimplemented or invalid opcode {:#X}",
@@ -437,5 +449,20 @@ mod test {
             assert_pixel(&emulator, 4 * WIDTH + i, i % 2 == 1);
         }
         assert_pixel(&emulator, 4 * WIDTH + 9, false);
+    }
+
+    #[test]
+    fn test_fx1e() {
+        let program = vec![
+            0xA1, 0x23, // Set index register to 0x123
+            0x65, 0x02, // Set register 5 to 0x02
+            0xF5, 0x1E  // Adds register 5 to index register
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+        for _ in 0..3 {
+            emulator.run_instruction();
+        }
+        assert_eq!(emulator.index_register, 0x125);
     }
 }
