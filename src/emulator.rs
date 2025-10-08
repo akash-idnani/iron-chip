@@ -1,7 +1,5 @@
 use crate::window;
-use crate::window::{Chip8Window, WIDTH};
-use std::fmt;
-use std::fmt::Formatter;
+use crate::window::WIDTH;
 
 const RAM_SIZE: usize = 4096;
 
