@@ -310,47 +310,72 @@ mod test {
         assert_eq!(emulator.registers[1], 0x3);
     }
 
+    fn assert_pixel(emulator: &Chip8Emulator, display_buffer_addr: usize, set: bool) {
+        if set {
+            assert_ne!(emulator.display_buffer[display_buffer_addr], 0);
+        } else {
+            assert_eq!(emulator.display_buffer[display_buffer_addr], 0);
+        }
+    }
+
     #[test]
     fn test_dxyn() {
         let program: Vec<u8> = vec![
             0x60, 1, // Set register 0 to 1
             0x61, 2, // Set register 1 to 2
-            0xA2, 0x08, // Set index register to 0x208
+            0x62, 3, // Set register 2 to 3
+            0xA2, 0x0C, // Set index register to 0x20C
             0xD0, 0x12,       // Display to location (1, 2), height 2
+            0xD0, 0x22,       // Display to location (1, 3), height 2
             0xFF,       // Bitmask row 1
             0b10101010, // Bitmask row 2
         ];
 
         let mut emulator = Chip8Emulator::new(program, 10);
+        for _ in 0..5 {
+            emulator.run_instruction();
+        }
+
+        assert_eq!(emulator.registers[0xF], 0); // no collision
+
+        // First row, everything should be set
+        assert_pixel(&emulator, 2 * WIDTH, false);
+        for i in 1..=8 {
+            assert_pixel(&emulator, 2 * WIDTH + i, true);
+        }
+        assert_pixel(&emulator, 2 * WIDTH + 9, false);
+
+        // Second row, alternating
+        assert_pixel(&emulator, 3 * WIDTH, false);
+        for i in 1..=8 {
+            assert_pixel(&emulator, 3 * WIDTH + i, i % 2 == 1);
+        }
+        assert_pixel(&emulator, 3 * WIDTH + 9, false);
+
+        // Should overwrite row 3, leave row 2
         emulator.run_instruction();
-        emulator.run_instruction();
-        emulator.run_instruction();
-        emulator.run_instruction();
 
-        assert_eq!(emulator.display_buffer[2 * WIDTH], 0);
+        assert_eq!(emulator.registers[0xF], 1); // Collision
 
-        assert_ne!(emulator.display_buffer[2 * WIDTH + 1], 0);
-        assert_ne!(emulator.display_buffer[2 * WIDTH + 2], 0);
-        assert_ne!(emulator.display_buffer[2 * WIDTH + 3], 0);
-        assert_ne!(emulator.display_buffer[2 * WIDTH + 4], 0);
-        assert_ne!(emulator.display_buffer[2 * WIDTH + 5], 0);
-        assert_ne!(emulator.display_buffer[2 * WIDTH + 6], 0);
-        assert_ne!(emulator.display_buffer[2 * WIDTH + 7], 0);
-        assert_ne!(emulator.display_buffer[2 * WIDTH + 8], 0);
+        // First row, everything should be set
+        assert_pixel(&emulator, 2 * WIDTH, false);
+        for i in 1..=8 {
+            assert_pixel(&emulator, 2 * WIDTH + i, true);
+        }
+        assert_pixel(&emulator, 2 * WIDTH + 9, false);
 
-        assert_eq!(emulator.display_buffer[2 * WIDTH + 9], 0);
+        // Second row, everything should be set
+        assert_pixel(&emulator, 3 * WIDTH, false);
+        for i in 1..=8 {
+            assert_pixel(&emulator, 3 * WIDTH + i, true);
+        }
+        assert_pixel(&emulator, 3 * WIDTH + 9, false);
 
-        assert_eq!(emulator.display_buffer[3 * WIDTH], 0);
-
-        assert_eq!(emulator.display_buffer[3 * WIDTH + 1], 0);
-        assert_ne!(emulator.display_buffer[2 * WIDTH + 2], 0);
-        assert_ne!(emulator.display_buffer[2 * WIDTH + 3], 0);
-        assert_ne!(emulator.display_buffer[2 * WIDTH + 4], 0);
-        assert_ne!(emulator.display_buffer[2 * WIDTH + 5], 0);
-        assert_ne!(emulator.display_buffer[2 * WIDTH + 6], 0);
-        assert_ne!(emulator.display_buffer[2 * WIDTH + 7], 0);
-        assert_ne!(emulator.display_buffer[2 * WIDTH + 8], 0);
-
-        assert_eq!(emulator.display_buffer[2 * WIDTH + 9], 0);
+        // New third row, alternating
+        assert_pixel(&emulator, 4 * WIDTH, false);
+        for i in 1..=8 {
+            assert_pixel(&emulator, 4 * WIDTH + i,  i % 2 == 1);
+        }
+        assert_pixel(&emulator, 4 * WIDTH + 9, false);
     }
 }
