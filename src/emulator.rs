@@ -107,18 +107,17 @@ impl Chip8Emulator {
         let decoded_instruction = Chip8Emulator::decode(instruction);
 
         match decoded_instruction {
+            //00E0: Clears the screen
             DecodedInstruction {
-                //00E0: Clears the screen
                 raw_instruction: 0x00E0,
                 ..
             } => {
-                // Clear screen
                 self.display_buffer.fill(0);
                 debug!("0x00E0: Clearing display buffer");
             }
 
+            // 1NNN: Jump to address NNN
             DecodedInstruction {
-                // 1NNN: Jump to address NNN
                 first_nibble: 0x1,
                 nnn_12_bit_address,
                 raw_instruction,
@@ -128,8 +127,25 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: Jumping to address {nnn_12_bit_address:#3X}");
             }
 
+            // 3XNN: Skips the next instruction if VX equals NN
+            // (usually the next instruction is a jump to skip a code block).
             DecodedInstruction {
-                // 6XNN: Sets VX to NN
+                first_nibble: 0x3,
+                x_register,
+                nn_8_bit_constant,
+                raw_instruction,
+                ..
+            } => {
+                if self.registers[x_register as usize] == nn_8_bit_constant {
+                    self.program_counter += 2;
+                    debug!("{raw_instruction:#X}: Skipping because register {x_register} == {nn_8_bit_constant}");
+                } else {
+                    debug!("{raw_instruction:#X}: Not skipping because register {x_register} != {nn_8_bit_constant}");
+                }
+            }
+
+            // 6XNN: Sets VX to NN
+            DecodedInstruction {
                 first_nibble: 0x6,
                 x_register,
                 nn_8_bit_constant,
@@ -140,8 +156,8 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: Setting register {x_register} to {nn_8_bit_constant:#2X}");
             }
 
+            // 7XNN: Adds NN to VX (carry flag is not changed)
             DecodedInstruction {
-                // 7XNN: Adds NN to VX (carry flag is not changed)
                 first_nibble: 0x7,
                 x_register,
                 nn_8_bit_constant,
@@ -152,6 +168,7 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: Adding {nn_8_bit_constant} to register {x_register}");
             }
 
+            // AXNN: Sets I to the address NNN.
             DecodedInstruction {
                 first_nibble: 0xA,
                 nnn_12_bit_address,
@@ -162,6 +179,7 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: Setting index register to {nnn_12_bit_address:#3X}");
             }
 
+            // DXYN:
             // Draws a sprite at coordinate (VX, VY) that has a width of 8 pixels and a height of N pixels.
             // Each row of 8 pixels is read as bit-coded starting from memory location I;
             // I value does not change after the execution of this instruction.
@@ -241,6 +259,14 @@ impl Chip8Emulator {
 mod test {
     use super::*;
 
+    fn assert_pixel(emulator: &Chip8Emulator, display_buffer_addr: usize, set: bool) {
+        if set {
+            assert_ne!(emulator.display_buffer[display_buffer_addr], 0);
+        } else {
+            assert_eq!(emulator.display_buffer[display_buffer_addr], 0);
+        }
+    }
+
     #[test]
     fn test_initial_ram() {
         let mut rom = vec![0; PROGRAM_MAX_SIZE];
@@ -287,6 +313,23 @@ mod test {
     }
 
     #[test]
+    fn test_3xnn() {
+        let program = vec![
+            0x61, 0x12, // Set register 1 to 0x12
+            0x31, 0x00, // If register 1 == 0, skip next instruction
+            0x31, 0x12, // If register 1 == 0x12, skip next instruction
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+        emulator.run_instruction();
+        emulator.run_instruction(); // Should not skip
+        assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS + 4);
+
+        emulator.run_instruction(); // Should skip
+        assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS + 8);
+    }
+
+    #[test]
     fn test_6xnn() {
         let mut emulator = Chip8Emulator::new(vec![0x60, 0x12, 0x6e, 0x34], 10);
 
@@ -308,14 +351,6 @@ mod test {
         assert_eq!(emulator.registers[1], 0x3);
     }
 
-    fn assert_pixel(emulator: &Chip8Emulator, display_buffer_addr: usize, set: bool) {
-        if set {
-            assert_ne!(emulator.display_buffer[display_buffer_addr], 0);
-        } else {
-            assert_eq!(emulator.display_buffer[display_buffer_addr], 0);
-        }
-    }
-
     #[test]
     fn test_dxyn() {
         let program: Vec<u8> = vec![
@@ -323,7 +358,7 @@ mod test {
             0x61, 2, // Set register 1 to 2
             0x62, 3, // Set register 2 to 3
             0xA2, 0x0C, // Set index register to 0x20C
-            0xD0, 0x12,       // Display to location (1, 2), height 2
+            0xD0, 0x12, // Display to location (1, 2), height 2
             0xD0, 0x22,       // Display to location (1, 3), height 2
             0xFF,       // Bitmask row 1
             0b10101010, // Bitmask row 2
@@ -372,7 +407,7 @@ mod test {
         // New third row, alternating
         assert_pixel(&emulator, 4 * WIDTH, false);
         for i in 1..=8 {
-            assert_pixel(&emulator, 4 * WIDTH + i,  i % 2 == 1);
+            assert_pixel(&emulator, 4 * WIDTH + i, i % 2 == 1);
         }
         assert_pixel(&emulator, 4 * WIDTH + 9, false);
     }
