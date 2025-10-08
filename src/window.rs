@@ -1,7 +1,7 @@
 use minifb::{Scale, Window, WindowOptions};
 
-const WIDTH: usize = 64;
-const HEIGHT: usize = 32;
+pub const WIDTH: usize = 64;
+pub const HEIGHT: usize = 32;
 
 pub struct Chip8Window {
     window: Window,
@@ -16,16 +16,14 @@ impl Chip8Window {
             WindowOptions {
                 scale: Scale::X16,
                 ..Default::default()
-            }
-        ).unwrap();
+            },
+        )
+        .unwrap();
 
         // Unrestrict this so the main game loop can handle setting FPS
         window.set_target_fps(0);
 
-        Self {
-            window
-        }
-
+        Self { window }
     }
 
     pub fn should_run(&self) -> bool {

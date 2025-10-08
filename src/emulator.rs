@@ -1,3 +1,6 @@
+use crate::window;
+use crate::window::Chip8Window;
+
 const RAM_SIZE: usize = 4096;
 
 /// First 0x200 bytes are reserved for the interpreter itself plus fonts
@@ -21,7 +24,7 @@ const FONTS: [u8; 80] = [
     0xF0, 0x80, 0x80, 0x80, 0xF0, // C
     0xE0, 0x90, 0x90, 0x90, 0xE0, // D
     0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-    0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
 pub struct Chip8Emulator {
@@ -33,10 +36,24 @@ pub struct Chip8Emulator {
     stack_pointer: u8,
     delay_timer: u8,
     sound_timer: u8,
+    pub display_buffer: [u32; window::WIDTH * window::HEIGHT],
+
+    instructions_per_frame: u8,
+}
+
+#[derive(Debug)]
+struct DecodedInstruction {
+    first_nibble: u8,
+    x_register: u8, // Second nibble
+    y_register: u8, // Third nibble
+    n_4_bit_constant: u8, // Fourth nibble
+    nn_8_bit_constant: u8, // Second byte
+    nnn_12_bit_address: u16, // Second, third and fourth nibbles
+    raw_instruction: u16,
 }
 
 impl Chip8Emulator {
-    pub fn new(rom: Vec<u8>) -> Self {
+    pub fn new(rom: Vec<u8>, instructions_per_frame: u8) -> Self {
         assert!(rom.len() <= PROGRAM_MAX_SIZE);
 
         let mut ram = [0; RAM_SIZE];
@@ -60,6 +77,62 @@ impl Chip8Emulator {
             stack_pointer: 0,
             delay_timer: 0,
             sound_timer: 0,
+            display_buffer: [0; window::WIDTH * window::HEIGHT],
+            instructions_per_frame,
+        }
+    }
+
+    pub fn run_60hz_frame(&mut self) {
+        debug!("Running 60hz frame");
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+            debug!("Decrementing delay counter: {}", self.delay_timer);
+        }
+
+        if self.sound_timer > 0 {
+            self.sound_timer -= 1;
+            debug!("Decrementing sound timer: {}", self.sound_timer);
+        }
+
+        for _ in 0..self.instructions_per_frame {
+            self.run_instruction();
+        }
+    }
+
+    fn run_instruction(&mut self) {
+        let instruction = self.fetch();
+
+        self.program_counter += 2;
+
+        let decoded_instruction = Chip8Emulator::decode(instruction);
+        match decoded_instruction {
+            DecodedInstruction {raw_instruction: 0x00E0, ..} => { // Clear screen
+                self.display_buffer.fill(0);
+                debug!("Clearing display buffer");
+            }
+
+            _ => {
+                error!("Unimplemented or invalid opcode {:?}", decoded_instruction);
+            }
+        }
+    }
+
+    fn fetch(&mut self) -> u16 {
+        u16::from_be_bytes([
+            self.ram[self.index_register as usize],
+            self.ram[self.index_register as usize + 1],
+        ])
+    }
+
+    fn decode(instruction: u16) -> DecodedInstruction {
+        DecodedInstruction {
+            first_nibble: (instruction >> 12) as u8,
+            x_register: ((instruction >> 8) as u8) & 0xF,
+            y_register: ((instruction >> 4) as u8) & 0xF,
+            n_4_bit_constant: (instruction & 0xF) as u8,
+            nn_8_bit_constant: instruction as u8,
+            nnn_12_bit_address: instruction & 0x0FFF,
+            raw_instruction: instruction,
         }
     }
 }
@@ -84,15 +157,15 @@ mod test {
 
         // Check the markers
         assert_eq!(emulator.ram[PROGRAM_START_ADDRESS as usize], 42);
-        assert_eq!(emulator.ram[PROGRAM_START_ADDRESS as usize + PROGRAM_MAX_SIZE - 1], 69);
+        assert_eq!(
+            emulator.ram[PROGRAM_START_ADDRESS as usize + PROGRAM_MAX_SIZE - 1],
+            69
+        );
     }
 
     #[test]
     #[should_panic(expected = "PROGRAM_MAX_SIZE")]
     fn test_emulator_too_large_rom_fails() {
-        Chip8Emulator::new(
-            vec![0; PROGRAM_MAX_SIZE + 1]
-        );
+        Chip8Emulator::new(vec![0; PROGRAM_MAX_SIZE + 1]);
     }
 }
-
