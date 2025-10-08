@@ -224,12 +224,13 @@ impl Chip8Emulator {
                         let dest_address = (y_counter + y) * WIDTH + (x_counter + x);
                         let is_already_on = self.display_buffer[dest_address] != 0;
 
-                        if is_pixel_on && is_already_on {
-                            collision_detected = true;
-                        }
-
                         if is_pixel_on {
-                            self.display_buffer[dest_address] = 0xFFFFFFFF;
+                            if is_already_on {
+                                self.display_buffer[dest_address] = 0x0;
+                                collision_detected = true;
+                            } else {
+                                self.display_buffer[dest_address] = 0xFFFFFFFF;
+                            }
                         }
                     }
                 }
@@ -423,10 +424,10 @@ mod test {
         }
         assert_pixel(&emulator, 2 * WIDTH + 9, false);
 
-        // Second row, everything should be set
+        // Second row, alternating the other way around now because all the 1s got flipped to 0
         assert_pixel(&emulator, 3 * WIDTH, false);
         for i in 1..=8 {
-            assert_pixel(&emulator, 3 * WIDTH + i, true);
+            assert_pixel(&emulator, 3 * WIDTH + i, i % 2 == 0);
         }
         assert_pixel(&emulator, 3 * WIDTH + 9, false);
 
