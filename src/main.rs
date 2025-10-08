@@ -1,16 +1,17 @@
-use std::fs;
-use std::path::PathBuf;
 use crate::emulator::Chip8Emulator;
 use crate::window::Chip8Window;
+use clap::Parser;
+use std::fs;
+use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use clap::Parser;
 
 mod emulator;
 mod window;
 
 extern crate pretty_env_logger;
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -27,6 +28,7 @@ fn main() {
 
     let mut window = Chip8Window::new();
     let mut emulator = Chip8Emulator::new(rom_data, 12);
+    let mut frame_count = 0;
 
     const INTERVAL: Duration = Duration::from_micros(16667); // 60Hz
 
@@ -38,10 +40,15 @@ fn main() {
 
         let current_runtime = Instant::now().duration_since(frame_start_time);
 
-        if current_runtime >= INTERVAL  {
-            trace!("WARNING: Exceeded 60Hz Frame! Runtime: {:?}", current_runtime);
+        if current_runtime >= INTERVAL {
+            trace!(
+                "WARNING: Exceeded 60Hz Frame! Runtime: {:?}",
+                current_runtime
+            );
         } else {
             sleep(INTERVAL - current_runtime);
         }
+
+        frame_count += 1;
     }
 }

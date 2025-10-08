@@ -1,5 +1,7 @@
 use crate::window;
-use crate::window::Chip8Window;
+use crate::window::{Chip8Window, WIDTH};
+use std::fmt;
+use std::fmt::Formatter;
 
 const RAM_SIZE: usize = 4096;
 
@@ -44,10 +46,10 @@ pub struct Chip8Emulator {
 #[derive(Debug)]
 struct DecodedInstruction {
     first_nibble: u8,
-    x_register: u8, // Second nibble
-    y_register: u8, // Third nibble
-    n_4_bit_constant: u8, // Fourth nibble
-    nn_8_bit_constant: u8, // Second byte
+    x_register: u8,          // Second nibble
+    y_register: u8,          // Third nibble
+    n_4_bit_constant: u8,    // Fourth nibble
+    nn_8_bit_constant: u8,   // Second byte
     nnn_12_bit_address: u16, // Second, third and fourth nibbles
     raw_instruction: u16,
 }
@@ -106,21 +108,110 @@ impl Chip8Emulator {
 
         let decoded_instruction = Chip8Emulator::decode(instruction);
         match decoded_instruction {
-            DecodedInstruction {raw_instruction: 0x00E0, ..} => { // Clear screen
+            DecodedInstruction {
+                first_nibble: 0x1,
+                nnn_12_bit_address,
+                raw_instruction,
+                ..
+            } => {
+                self.program_counter = nnn_12_bit_address;
+                debug!("{raw_instruction:#X}: Jumping to address {nnn_12_bit_address:#3X}");
+            }
+            DecodedInstruction {
+                raw_instruction: 0x00E0,
+                ..
+            } => {
+                // Clear screen
                 self.display_buffer.fill(0);
-                debug!("Clearing display buffer");
+                debug!("0x00E0: Clearing display buffer");
+            }
+
+            DecodedInstruction {
+                first_nibble: 0x6,
+                x_register,
+                nn_8_bit_constant,
+                raw_instruction,
+                ..
+            } => {
+                self.registers[x_register as usize] = nn_8_bit_constant;
+                debug!("{raw_instruction:#X}: Setting register {x_register} to {nn_8_bit_constant:#2X}");
+            }
+
+            DecodedInstruction {
+                first_nibble: 0x7,
+                x_register,
+                nn_8_bit_constant,
+                raw_instruction,
+                ..
+            } => {
+                self.registers[x_register as usize] += nn_8_bit_constant;
+                debug!("{raw_instruction:#X}: Adding {nn_8_bit_constant} to register {x_register}");
+            }
+
+            DecodedInstruction {
+                first_nibble: 0xA,
+                nnn_12_bit_address,
+                raw_instruction,
+                ..
+            } => {
+                self.index_register = nnn_12_bit_address;
+                debug!("{raw_instruction:#X}: Setting index register to {nnn_12_bit_address:#3X}");
+            }
+
+            DecodedInstruction {
+                first_nibble: 0xD,
+                x_register,
+                y_register,
+                n_4_bit_constant,
+                raw_instruction,
+                ..
+            } => {
+                let x = self.registers[x_register as usize] as usize;
+                let y= self.registers[y_register as usize] as usize;
+                let height = n_4_bit_constant as usize;
+
+                let mut collision_detected = false;
+
+                for y_counter in 0..height {
+                    for x_counter in 0..8 {
+                        let x_counter = 7 - x_counter;
+                        let is_pixel_on = (self.ram[self.index_register as usize + y_counter] & (1 << x_counter)) != 0;
+
+                        let dest_address = (y_counter + y) * WIDTH + (x_counter + x);
+                        let is_already_on = self.display_buffer[dest_address] != 0;
+
+                        if is_pixel_on && is_already_on {
+                            collision_detected = true;
+                        }
+
+                        if is_pixel_on {
+                            self.display_buffer[dest_address] = 0xFFFFFFFF;
+                        }
+                    }
+                }
+
+                if collision_detected {
+                    self.registers[0xF] = 1;
+                }
+
+
+                debug!("{raw_instruction:#X}: Drawing sprite at address {:#3X} of height {height} to ({x}, {y}). Collision Detected: {collision_detected}",
+                    self.index_register);
             }
 
             _ => {
-                error!("Unimplemented or invalid opcode {:?}", decoded_instruction);
+                error!(
+                    "Unimplemented or invalid opcode {:#X}",
+                    decoded_instruction.raw_instruction
+                );
             }
         }
     }
 
     fn fetch(&mut self) -> u16 {
         u16::from_be_bytes([
-            self.ram[self.index_register as usize],
-            self.ram[self.index_register as usize + 1],
+            self.ram[self.program_counter as usize],
+            self.ram[self.program_counter as usize + 1],
         ])
     }
 
