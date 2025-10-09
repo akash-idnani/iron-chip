@@ -170,6 +170,13 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: Setting V{x_register} to V{y_register}");
             }
 
+            // 8XY2: Sets VX to VX and VY. (bitwise AND operation)
+            DecodedInstruction { first_nibble: 0x8, n_4_bit_constant: 2, ..} => {
+                self.registers[x_register as usize] &= self.registers[y_register as usize];
+
+                debug!("{raw_instruction:#X}: Setting V{x_register} &= V{y_register}");
+            }
+
             // 8XY4: Adds VY to VX. VF is set to 1 when there's an overflow, and to 0 when there is not.
             DecodedInstruction { first_nibble: 0x8, n_4_bit_constant: 0x4, .. } => {
                 let x_value = self.registers[x_register as usize];
@@ -391,6 +398,20 @@ mod test {
         }
 
         assert_eq!(emulator.registers[0xA], 0x30);
+    }
+
+    #[test]
+    fn test_8xy2() {
+        let program = vec![0x84, 0x52];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+        emulator.registers[4] = 0b11110000;
+        emulator.registers[5] = 0b10101111;
+
+        emulator.run_instruction();
+
+        assert_eq!(emulator.registers[4], 0b10100000); // V4 &= V5
+        assert_eq!(emulator.registers[5], 0b10101111); // V5 should remain unchanged
     }
 
     #[test]
