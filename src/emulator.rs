@@ -164,6 +164,14 @@ impl Chip8Emulator {
 
             // 5XY0: Skips the next instruction if VX equals VY
             // (usually the next instruction is a jump to skip a code block).
+            DecodedInstruction { first_nibble: 0x5, n_4_bit_constant: 0x0, ..} => {
+                if self.registers[x_register as usize] == self.registers[y_register as usize] {
+                    self.program_counter += 2;
+                    debug!("{raw_instruction:#X}: Skipping because V{x_register} == V{y_register}");
+                } else {
+                    debug!("{raw_instruction:#X}: Not skipping because V{x_register} != V{y_register}");
+                }
+            }
 
             // 6XNN: Sets VX to NN
             DecodedInstruction { first_nibble: 0x6, .. } => {
@@ -390,6 +398,24 @@ mod test {
 
         emulator.run_instruction(); // Should skip
         assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS + 6);
+    }
+
+    #[test]
+    fn test_5xy0() {
+        let program = vec![
+            0x61, 0x12, // Set V1 to 0x12
+            0x50, 0x10, // Skip if V0 == V1, so don't skip
+            0x50, 0x20, // Skip if V0 == V2, so skip
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+
+        emulator.run_instruction();
+        emulator.run_instruction(); // Should not skip
+        assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS + 4);
+
+        emulator.run_instruction(); // Should skip
+        assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS + 8);
     }
 
     #[test]
