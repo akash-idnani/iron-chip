@@ -125,6 +125,14 @@ impl Chip8Emulator {
                 debug!("0x00E0: Clearing display buffer");
             }
 
+            // 00EE Returns from a subroutine.
+            DecodedInstruction { raw_instruction: 0x00EE, .. } => {
+                self.stack_pointer -= 1;
+                self.program_counter = self.stack[self.stack_pointer as usize];
+
+                debug!("{raw_instruction:#X}: Returning from subroutine");
+            }
+
             // 1NNN: Jump to address NNN
             DecodedInstruction { first_nibble: 0x1, .. } => {
                 self.program_counter = nnn_12_bit_address;
@@ -290,7 +298,7 @@ impl Chip8Emulator {
 
             _ => {
                 error!(
-                    "Unimplemented or invalid opcode {:#X}",
+                    "Unimplemented or invalid opcode {:#4X}",
                     decoded_instruction.raw_instruction
                 );
             }
@@ -362,6 +370,19 @@ mod test {
         emulator.run_instruction();
 
         assert!(emulator.display_buffer.iter().all(|i| *i == 0));
+    }
+
+    #[test]
+    fn test_00ee() {
+        let mut emulator = Chip8Emulator::new(vec![0x00, 0xEE], 10);
+
+        emulator.stack[0] = 0x1234;
+        emulator.stack_pointer += 1;
+
+        emulator.run_instruction();
+
+        assert_eq!(emulator.program_counter, 0x1234);
+        assert_eq!(emulator.stack_pointer, 0);
     }
 
     #[test]
