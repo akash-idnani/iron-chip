@@ -181,7 +181,7 @@ impl Chip8Emulator {
 
             // 7XNN: Adds NN to VX (carry flag is not changed)
             DecodedInstruction { first_nibble: 0x7, .. } => {
-                self.registers[x_register as usize] += nn_8_bit_constant;
+                self.registers[x_register as usize] = self.registers[x_register as usize].wrapping_add(nn_8_bit_constant);
                 debug!("{raw_instruction:#X}: Adding {nn_8_bit_constant} to register {x_register}");
             }
 
@@ -431,13 +431,21 @@ mod test {
 
     #[test]
     fn test_7xnn() {
-        let mut emulator = Chip8Emulator::new(vec![0x71, 0x01, 0x71, 0x02], 10);
+        let program = vec![
+            0x71, 0x01, // Add 1 to V1
+            0x71, 0x02, // Add 2 to V1
+            0x71, 0xFF, // Add 255 to V1. Should overflow back to 2
+        ];
+        let mut emulator = Chip8Emulator::new(program, 10);
 
         emulator.run_instruction();
         assert_eq!(emulator.registers[1], 0x1);
 
         emulator.run_instruction();
         assert_eq!(emulator.registers[1], 0x3);
+
+        emulator.run_instruction();
+        assert_eq!(emulator.registers[1], 0x2);
     }
 
     #[test]
