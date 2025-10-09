@@ -214,6 +214,17 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: V{x_register} += V{y_register} - Overflow: {overflow}");
             }
 
+            // 9XY0: Skips the next instruction if VX does not equal VY.
+            // (Usually the next instruction is a jump to skip a code block).
+            DecodedInstruction {first_nibble: 0x9, n_4_bit_constant: 0x0, ..} => {
+                if self.registers[x_register] != self.registers[y_register] {
+                    self.program_counter += 2;
+                    debug!("{raw_instruction:#X}: Skipping because V{x_register} != V{y_register}");
+                } else {
+                    debug!("{raw_instruction:#X}: Not skipping because V{x_register} == V{y_register}");
+                }
+            }
+
             // AXNN: Sets I to the address NNN.
             DecodedInstruction { first_nibble: 0xA, .. } => {
                 self.index_register = nnn_12_bit_address;
@@ -502,6 +513,24 @@ mod test {
 
         assert_eq!(emulator.registers[6], 0);
         assert_eq!(emulator.registers[0xF], 1); // Overflow set
+    }
+
+    #[test]
+    fn test_9xy0() {
+        let program = vec![
+            0x60, 0x01, // Set V0 to 1
+            0x91, 0x20, // Skip if V1 != V2, so don't skip
+            0x90, 0x10, // Skip if V0 != V1, so skip
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+
+        emulator.run_instruction();
+        emulator.run_instruction(); // Should not skip
+        assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS + 0x4);
+
+        emulator.run_instruction(); // Should skip
+        assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS + 0x8);
     }
 
     #[test]
