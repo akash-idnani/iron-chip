@@ -145,11 +145,25 @@ impl Chip8Emulator {
             DecodedInstruction { first_nibble: 0x3, .. } => {
                 if self.registers[x_register as usize] == nn_8_bit_constant {
                     self.program_counter += 2;
-                    debug!("{raw_instruction:#X}: Skipping because register {x_register} == {nn_8_bit_constant}");
+                    debug!("{raw_instruction:#X}: Skipping because V{x_register} == {nn_8_bit_constant}");
                 } else {
-                    debug!("{raw_instruction:#X}: Not skipping because register {x_register} != {nn_8_bit_constant}");
+                    debug!("{raw_instruction:#X}: Not skipping because V{x_register} != {nn_8_bit_constant}");
                 }
             }
+
+            // 4XNN: Skips the next instruction if VX does not equal NN
+            // (usually the next instruction is a jump to skip a code block).
+            DecodedInstruction { first_nibble: 0x4, .. } => {
+                if self.registers[x_register as usize] != nn_8_bit_constant {
+                    self.program_counter += 2;
+                    debug!("{raw_instruction:#X}: Skipping because V{x_register} != {nn_8_bit_constant}");
+                } else {
+                    debug!("{raw_instruction:#X}: Not skipping because V{x_register} == {nn_8_bit_constant}");
+                }
+            }
+
+            // 5XY0: Skips the next instruction if VX equals VY
+            // (usually the next instruction is a jump to skip a code block).
 
             // 6XNN: Sets VX to NN
             DecodedInstruction { first_nibble: 0x6, .. } => {
@@ -360,6 +374,22 @@ mod test {
 
         emulator.run_instruction(); // Should skip
         assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS + 8);
+    }
+
+    #[test]
+    fn test_4xnn() {
+        let program = vec![
+            0x40, 0x00, // V0 == 0, so don't skip
+            0x40, 0x01, // V= != 1, so skip
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+
+        emulator.run_instruction(); // Should not skip
+        assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS + 2);
+
+        emulator.run_instruction(); // Should skip
+        assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS + 6);
     }
 
     #[test]
