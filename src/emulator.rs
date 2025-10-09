@@ -203,6 +203,13 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: Setting V{x_register} to V{y_register}");
             }
 
+            // 8XY1: Sets VX to VX or VY. (bitwise OR operation).
+            DecodedInstruction { first_nibble: 0x8, n_4_bit_constant: 0x1, .. } => {
+                self.registers[x_register] |= self.registers[y_register];
+
+                debug!("{raw_instruction:#X}: Setting V{x_register} |= V{y_register}");
+            }
+
             // 8XY2: Sets VX to VX and VY. (bitwise AND operation)
             DecodedInstruction { first_nibble: 0x8, n_4_bit_constant: 2, ..} => {
                 self.registers[x_register] &= self.registers[y_register];
@@ -497,6 +504,22 @@ mod test {
         }
 
         assert_eq!(emulator.registers[0xA], 0x30);
+    }
+
+    #[test]
+    fn test_8xy1() {
+        let program = vec![
+            0x60, 0b10101010, // Set V0
+            0x61, 0b11110000, // Set V1
+            0x80, 0x11,       // V0 |= V1
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+        for _ in 0..3 {
+            emulator.run_instruction();
+        }
+
+        assert_eq!(emulator.registers[0], 0b11111010);
     }
 
     #[test]
