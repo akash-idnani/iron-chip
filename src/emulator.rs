@@ -115,6 +115,9 @@ impl Chip8Emulator {
             raw_instruction,
         } = decoded_instruction;
 
+        let x_register = x_register as usize;
+        let y_register = y_register as usize;
+
         match decoded_instruction {
             //00E0: Clears the screen
             DecodedInstruction { raw_instruction: 0x00E0, .. } => {
@@ -143,7 +146,7 @@ impl Chip8Emulator {
             // 3XNN: Skips the next instruction if VX equals NN
             // (usually the next instruction is a jump to skip a code block).
             DecodedInstruction { first_nibble: 0x3, .. } => {
-                if self.registers[x_register as usize] == nn_8_bit_constant {
+                if self.registers[x_register] == nn_8_bit_constant {
                     self.program_counter += 2;
                     debug!("{raw_instruction:#X}: Skipping because V{x_register} == {nn_8_bit_constant}");
                 } else {
@@ -154,7 +157,7 @@ impl Chip8Emulator {
             // 4XNN: Skips the next instruction if VX does not equal NN
             // (usually the next instruction is a jump to skip a code block).
             DecodedInstruction { first_nibble: 0x4, .. } => {
-                if self.registers[x_register as usize] != nn_8_bit_constant {
+                if self.registers[x_register] != nn_8_bit_constant {
                     self.program_counter += 2;
                     debug!("{raw_instruction:#X}: Skipping because V{x_register} != {nn_8_bit_constant}");
                 } else {
@@ -165,7 +168,7 @@ impl Chip8Emulator {
             // 5XY0: Skips the next instruction if VX equals VY
             // (usually the next instruction is a jump to skip a code block).
             DecodedInstruction { first_nibble: 0x5, n_4_bit_constant: 0x0, ..} => {
-                if self.registers[x_register as usize] == self.registers[y_register as usize] {
+                if self.registers[x_register] == self.registers[y_register] {
                     self.program_counter += 2;
                     debug!("{raw_instruction:#X}: Skipping because V{x_register} == V{y_register}");
                 } else {
@@ -175,37 +178,37 @@ impl Chip8Emulator {
 
             // 6XNN: Sets VX to NN
             DecodedInstruction { first_nibble: 0x6, .. } => {
-                self.registers[x_register as usize] = nn_8_bit_constant;
+                self.registers[x_register] = nn_8_bit_constant;
                 debug!("{raw_instruction:#X}: Setting register {x_register} to {nn_8_bit_constant:#2X}");
             }
 
             // 7XNN: Adds NN to VX (carry flag is not changed)
             DecodedInstruction { first_nibble: 0x7, .. } => {
-                self.registers[x_register as usize] = self.registers[x_register as usize].wrapping_add(nn_8_bit_constant);
+                self.registers[x_register] = self.registers[x_register].wrapping_add(nn_8_bit_constant);
                 debug!("{raw_instruction:#X}: Adding {nn_8_bit_constant} to register {x_register}");
             }
 
             // 8XY0: Sets VX to the value of VY
             DecodedInstruction { first_nibble: 0x8, n_4_bit_constant: 0x0, .. } => {
-                self.registers[x_register as usize] = self.registers[y_register as usize];
+                self.registers[x_register] = self.registers[y_register];
 
                 debug!("{raw_instruction:#X}: Setting V{x_register} to V{y_register}");
             }
 
             // 8XY2: Sets VX to VX and VY. (bitwise AND operation)
             DecodedInstruction { first_nibble: 0x8, n_4_bit_constant: 2, ..} => {
-                self.registers[x_register as usize] &= self.registers[y_register as usize];
+                self.registers[x_register] &= self.registers[y_register];
 
                 debug!("{raw_instruction:#X}: Setting V{x_register} &= V{y_register}");
             }
 
             // 8XY4: Adds VY to VX. VF is set to 1 when there's an overflow, and to 0 when there is not.
             DecodedInstruction { first_nibble: 0x8, n_4_bit_constant: 0x4, .. } => {
-                let x_value = self.registers[x_register as usize];
-                let y_value = self.registers[y_register as usize];
+                let x_value = self.registers[x_register];
+                let y_value = self.registers[y_register];
                 let (result_value, overflow) = x_value.overflowing_add(y_value);
 
-                self.registers[x_register as usize] = result_value;
+                self.registers[x_register] = result_value;
                 self.registers[0xF] = if overflow { 1 } else { 0 };
 
                 debug!("{raw_instruction:#X}: V{x_register} += V{y_register} - Overflow: {overflow}");
@@ -224,8 +227,8 @@ impl Chip8Emulator {
             // As described above, VF is set to 1 if any screen pixels are flipped from set
             // to unset when the sprite is drawn, and to 0 if that does not happen
             DecodedInstruction { first_nibble: 0xD, .. } => {
-                let x = self.registers[x_register as usize] as usize;
-                let y = self.registers[y_register as usize] as usize;
+                let x = self.registers[x_register] as usize;
+                let y = self.registers[y_register] as usize;
                 let height = n_4_bit_constant as usize;
 
                 let mut collision_detected = false;
@@ -260,14 +263,14 @@ impl Chip8Emulator {
 
             // FX1E: Adds VX to I. VF is not affected.
             DecodedInstruction { first_nibble: 0xF, nn_8_bit_constant: 0x1E, .. } => {
-                self.index_register += self.registers[x_register as usize] as u16;
+                self.index_register += self.registers[x_register] as u16;
                 debug!("{raw_instruction:#X}: Adding register {x_register} to index");
             }
 
             // FX65: Fills from V0 to VX (including VX) with values from memory, starting at address I.
             // The offset from I is increased by 1 for each value read, but I itself is left unmodified
             DecodedInstruction { first_nibble: 0xF, nn_8_bit_constant: 0x65, .. } => {
-                for i in 0..=x_register as usize {
+                for i in 0..=x_register {
                     self.registers[i] = self.ram[self.index_register as usize + i];
                 }
 
