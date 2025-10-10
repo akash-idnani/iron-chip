@@ -269,6 +269,17 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: V{x_register} = V{y_register} - V{x_register} - Underflow: {underflow}");
             }
 
+            // 8XYE: Shifts VX to the left by 1, then sets VF to 1 if the most significant bit of VX
+            // prior to that shift was set, or to 0 if it was unset.
+            DecodedInstruction {first_nibble: 0x8, n_4_bit_constant: 0xE, .. } => {
+                let msb = self.registers[x_register] >> 7;
+
+                self.registers[x_register] <<= 1;
+                self.registers[0xF] = msb;
+
+                debug!("{raw_instruction:#X}: V{x_register} <<= 1: VF set to {msb}");
+            }
+
             // 9XY0: Skips the next instruction if VX does not equal VY.
             // (Usually the next instruction is a jump to skip a code block).
             DecodedInstruction {first_nibble: 0x9, n_4_bit_constant: 0x0, ..} => {
@@ -682,6 +693,27 @@ mod test {
 
         assert_eq!(emulator.registers[1], 254);
         assert_eq!(emulator.registers[0xF], 0);
+    }
+
+    #[test]
+    fn test_8xye() {
+        let program = vec![
+            0x60, 0b0100_0000, // Set V0
+            0x80, 0x0e, // V0 <<= 1, Expect V0 == 0b1000_0000 and VF == 0
+            0x80, 0x0e, // V0 <<= 1, Expect V0 == 0 and VF == 1
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+        emulator.run_instruction();
+        emulator.run_instruction();
+
+        assert_eq!(emulator.registers[0], 0b1000_0000);
+        assert_eq!(emulator.registers[0xF], 0);
+
+        emulator.run_instruction();
+
+        assert_eq!(emulator.registers[0], 0);
+        assert_eq!(emulator.registers[0xF], 1);
     }
 
     #[test]
