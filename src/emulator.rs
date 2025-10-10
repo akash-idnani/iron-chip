@@ -344,6 +344,16 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: Adding register {x_register} to index");
             }
 
+            // FX55: Stores from V0 to VX (including VX) in memory, starting at address I.
+            // The offset from I is increased by 1 for each value written, but I itself is left unmodified.
+            DecodedInstruction { first_nibble: 0xF, nn_8_bit_constant: 0x55, .. } => {
+                for i in 0..=x_register {
+                    self.ram[self.index_register as usize + i] = self.registers[i];
+                }
+
+                debug!("{raw_instruction:#X}: Filling location {:#X} with V0 - V{x_register}", self.index_register);
+            }
+
             // FX65: Fills from V0 to VX (including VX) with values from memory, starting at address I.
             // The offset from I is increased by 1 for each value read, but I itself is left unmodified
             DecodedInstruction { first_nibble: 0xF, nn_8_bit_constant: 0x65, .. } => {
@@ -808,6 +818,30 @@ mod test {
             emulator.run_instruction();
         }
         assert_eq!(emulator.index_register, 0x125);
+    }
+
+    #[test]
+    fn test_fx55() {
+        let program = vec![
+            0xFA, 0x55 // memcpy V0-V1 -> ram[index_register]
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+
+        for i in 0..=0xA {
+            emulator.registers[i] = i as u8 + 0x60;
+        }
+
+        emulator.index_register = 0x300;
+        emulator.run_instruction();
+
+        for i in 0..=0xA {
+            assert_eq!(emulator.ram[0x300 + i], i as u8 + 0x60)
+        }
+
+        // Check some surrounding values to make sure they haven't changed
+        assert_eq!(emulator.ram[0x2FF], 0);
+        assert_eq!(emulator.ram[0x30B], 0);
     }
 
     #[test]
