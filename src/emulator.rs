@@ -1,3 +1,4 @@
+use rand::Rng;
 use crate::window;
 use crate::window::WIDTH;
 
@@ -295,6 +296,16 @@ impl Chip8Emulator {
             DecodedInstruction { first_nibble: 0xA, .. } => {
                 self.index_register = nnn_12_bit_address;
                 debug!("{raw_instruction:#X}: Setting index register to {nnn_12_bit_address:#3X}");
+            }
+
+            // CXNN: Sets VX to the result of a bitwise and operation on a random number
+            // (Typically: 0 to 255) and NN.
+            DecodedInstruction { first_nibble: 0xC, .. } => {
+                let random: u8 = rand::rng().random();
+                let result = random & nn_8_bit_constant;
+                self.registers[x_register] = result;
+
+                debug!("{raw_instruction:#X}: Random number: V{x_register} = {random} & {nn_8_bit_constant} = {result}");
             }
 
             // DXYN:
