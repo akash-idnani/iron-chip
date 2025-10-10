@@ -344,6 +344,17 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: Adding register {x_register} to index");
             }
 
+            // FX33: Stores the binary-coded decimal representation of VX, with the hundreds digit in memory
+            // at location in I, the tens digit at location I+1, and the ones digit at location I+2.
+            DecodedInstruction {first_nibble: 0xF, nn_8_bit_constant: 0x33, ..} => {
+                let bcd = u8_bcd(self.registers[x_register]);
+                for i in 0..3 {
+                    self.ram[self.index_register as usize + i] = bcd[i];
+                }
+
+                debug!("{raw_instruction:#X}: Storing BCD of V{x_register} to index location");
+            }
+
             // FX55: Stores from V0 to VX (including VX) in memory, starting at address I.
             // The offset from I is increased by 1 for each value written, but I itself is left unmodified.
             DecodedInstruction { first_nibble: 0xF, nn_8_bit_constant: 0x55, .. } => {
@@ -834,6 +845,22 @@ mod test {
         assert_eq!(u8_bcd(123), [1, 2, 3]);
         assert_eq!(u8_bcd(255), [2, 5, 5]);
         assert_eq!(u8_bcd(42), [0, 4, 2]);
+    }
+
+    #[test]
+    fn test_fx33() {
+        let program = vec![
+            0xF0, 0x33, // Store V0 as BCD to index register
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+
+        emulator.registers[0] = 255;
+        emulator.index_register = 0x300;
+
+        emulator.run_instruction();
+
+        assert_eq!(&emulator.ram[0x300..0x303], &[2, 5, 5]);
     }
 
     #[test]
