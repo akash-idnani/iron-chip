@@ -247,6 +247,17 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: V{x_register} -= V{y_register} - Underflow: {underflow}");
             }
 
+            // 8XY6: Shifts VX to the right by 1, then stores the least significant bit of VX
+            // prior to the shift into VF
+            DecodedInstruction {first_nibble: 0x8, n_4_bit_constant: 0x6, .. } => {
+                let lsb = self.registers[x_register] & 0b1;
+
+                self.registers[x_register] >>= 1;
+                self.registers[0xF] = lsb;
+
+                debug!("{raw_instruction:#X}: V{x_register} >>= 1: VF set to {lsb}");
+            }
+
             // 8XY7: Sets VX to VY minus VX. VF is set to 0 when there's an underflow, and 1 when
             // there is not. (i.e. VF set to 1 if VY >= VX).
             DecodedInstruction { first_nibble: 0x8, n_4_bit_constant: 0x7, .. } => {
@@ -626,6 +637,27 @@ mod test {
 
         assert_eq!(emulator.registers[1], 255);
         assert_eq!(emulator.registers[0xF], 0);
+    }
+
+    #[test]
+    fn test_8xy6() {
+        let program = vec![
+            0x60, 0b10, // Set V0 to 0b10
+            0x80, 0x06, // V0 >>= 1, Expect V0 == 1 and VF == 0
+            0x80, 0x06, // V0 >>= 1, Expect V0 == 0 and VF == 1
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+        emulator.run_instruction();
+        emulator.run_instruction();
+
+        assert_eq!(emulator.registers[0], 1);
+        assert_eq!(emulator.registers[0xF], 0);
+
+        emulator.run_instruction();
+
+        assert_eq!(emulator.registers[0], 0);
+        assert_eq!(emulator.registers[0xF], 1);
     }
 
     #[test]
