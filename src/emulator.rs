@@ -236,6 +236,17 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: V{x_register} += V{y_register} - Overflow: {overflow}");
             }
 
+            // 8XY5: VY is subtracted from VX. VF is set to 0 when there's an underflow, and 1 when
+            // there is not. (i.e. VF set to 1 if VX >= VY and 0 if not)
+            DecodedInstruction { first_nibble: 0x8, n_4_bit_constant: 0x5, .. } => {
+                let (result, underflow) = self.registers[x_register].overflowing_sub(self.registers[y_register]);
+
+                self.registers[x_register] = result;
+                self.registers[0xF] = if underflow { 0 } else { 1 };
+
+                debug!("{raw_instruction:#X}: V{x_register} -= V{y_register} - Underflow: {underflow}");
+            }
+
             // 9XY0: Skips the next instruction if VX does not equal VY.
             // (Usually the next instruction is a jump to skip a code block).
             DecodedInstruction {first_nibble: 0x9, n_4_bit_constant: 0x0, ..} => {
@@ -580,6 +591,25 @@ mod test {
 
         assert_eq!(emulator.registers[6], 0);
         assert_eq!(emulator.registers[0xF], 1); // Overflow set
+    }
+
+    #[test]
+    fn test_8xy5() {
+        let program = vec![
+            0x60, 0x02, // Set V0 to 2
+            0x61, 0x03, // Set V1 to 3
+            0x81, 0x05, // V1 -= V0. Expect V1 == 1 and VF == 1
+            0x81, 0x05, // V1 -= V0. Expect V1 == 255 and Vf == 0
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+
+        emulator.run_instruction();
+        emulator.run_instruction();
+        emulator.run_instruction();
+
+        assert_eq!(emulator.registers[1], 1);
+        assert_eq!(emulator.registers[0xF], 1);
     }
 
     #[test]
