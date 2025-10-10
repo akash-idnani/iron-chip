@@ -393,6 +393,14 @@ impl Chip8Emulator {
     }
 }
 
+fn u8_bcd(byte: u8) -> [u8; 3] {
+    [
+        (byte / 100) % 10,
+        (byte / 10) % 10,
+        byte % 10
+    ]
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -818,6 +826,14 @@ mod test {
             emulator.run_instruction();
         }
         assert_eq!(emulator.index_register, 0x125);
+    }
+
+    #[test]
+    fn test_u8_bcd() {
+        assert_eq!(u8_bcd(0), [0, 0, 0]);
+        assert_eq!(u8_bcd(123), [1, 2, 3]);
+        assert_eq!(u8_bcd(255), [2, 5, 5]);
+        assert_eq!(u8_bcd(42), [0, 4, 2]);
     }
 
     #[test]
