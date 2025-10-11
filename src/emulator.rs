@@ -1,7 +1,7 @@
 use std::iter::zip;
 use rand::Rng;
 use crate::window;
-use crate::window::WIDTH;
+use crate::window::{HEIGHT, WIDTH};
 
 const RAM_SIZE: usize = 4096;
 
@@ -325,8 +325,8 @@ impl Chip8Emulator {
             // As described above, VF is set to 1 if any screen pixels are flipped from set
             // to unset when the sprite is drawn, and to 0 if that does not happen
             DecodedInstruction { first_nibble: 0xD, .. } => {
-                let x = self.registers[x_register] as usize;
-                let y = self.registers[y_register] as usize;
+                let x = self.registers[x_register] as usize % WIDTH;
+                let y = self.registers[y_register] as usize % HEIGHT;
                 let height = n_4_bit_constant as usize;
 
                 let mut collision_detected = false;
@@ -336,6 +336,14 @@ impl Chip8Emulator {
                         let is_pixel_on = (self.ram[self.index_register as usize + y_counter]
                             & (0x80 >> x_counter))
                             != 0;
+
+                        if x_counter + x >= WIDTH {
+                            continue;
+                        }
+
+                        if y_counter + y >= HEIGHT {
+                            continue;
+                        }
 
                         let dest_address = (y_counter + y) * WIDTH + (x_counter + x);
                         let is_already_on = self.display_buffer[dest_address] != 0;
@@ -351,9 +359,7 @@ impl Chip8Emulator {
                     }
                 }
 
-                if collision_detected {
-                    self.registers[0xF] = 1;
-                }
+                self.registers[0xF] = if collision_detected { 1 } else { 0 };
 
                 debug!("{raw_instruction:#X}: Drawing sprite at address {:#3X} of height {height} to ({x}, {y}). Collision Detected: {collision_detected}",
                     self.index_register);
