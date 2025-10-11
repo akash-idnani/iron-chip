@@ -37,7 +37,7 @@ pub struct Chip8Emulator {
     stack: [u16; 16],
     stack_pointer: u8,
     delay_timer: u8,
-    sound_timer: u8,
+    pub sound_timer: u8,
 
     previous_keyboard_state: [bool; 16],
     keyboard_state: [bool; 16],

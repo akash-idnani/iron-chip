@@ -1,7 +1,8 @@
 use crate::emulator::Chip8Emulator;
 use crate::window::Chip8Window;
 use clap::Parser;
-use std::fs;
+use std::{fs, io};
+use std::io::Write;
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
@@ -36,6 +37,10 @@ fn main() {
 
         emulator.run_60hz_frame(window.keyboard_state());
         window.update(&emulator.display_buffer);
+        if emulator.sound_timer > 0 {
+            print!("\x07");
+            io::stdout().flush().unwrap();
+        }
 
         let current_runtime = Instant::now().duration_since(frame_start_time);
 
