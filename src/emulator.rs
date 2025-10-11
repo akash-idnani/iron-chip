@@ -1,3 +1,4 @@
+use std::iter::zip;
 use rand::Rng;
 use crate::window;
 use crate::window::WIDTH;
@@ -37,7 +38,10 @@ pub struct Chip8Emulator {
     stack_pointer: u8,
     delay_timer: u8,
     sound_timer: u8,
+
+    previous_keyboard_state: [bool; 16],
     keyboard_state: [bool; 16],
+
     pub display_buffer: [u32; window::WIDTH * window::HEIGHT],
 
     instructions_per_frame: u8,
@@ -79,6 +83,7 @@ impl Chip8Emulator {
             stack_pointer: 0,
             delay_timer: 0,
             sound_timer: 0,
+            previous_keyboard_state: [false; 16],
             keyboard_state: [false; 16],
             display_buffer: [0; window::WIDTH * window::HEIGHT],
             instructions_per_frame,
@@ -97,6 +102,7 @@ impl Chip8Emulator {
             debug!("Decrementing sound timer: {}", self.sound_timer);
         }
 
+        self.previous_keyboard_state = self.keyboard_state;
         self.keyboard_state = new_keyboard_state;
 
         for _ in 0..self.instructions_per_frame {
@@ -386,16 +392,18 @@ impl Chip8Emulator {
             // FX0A: A key press is awaited, and then stored in VX (blocking operation, all instruction
             // halted until next key event, delay and sound timers should continue processing).
             DecodedInstruction { first_nibble: 0xF, nn_8_bit_constant: 0x0A, .. } => {
-                let first_pressed = self
-                    .keyboard_state
-                    .iter()
+                let first_released =
+                    zip(self.previous_keyboard_state.iter(), self.keyboard_state.iter())
                     .enumerate()
-                    .filter_map(|(idx, is_pressed)| is_pressed.then_some(idx))
+                    .filter_map(|(idx, (prev, curr))| {
+                        // Grab keys that were previously pressed, and are now released
+                        (*prev && !*curr).then_some(idx)
+                    })
                     .next();
 
-                if let Some(first_pressed) = first_pressed {
-                    self.registers[x_register] = first_pressed as u8;
-                    debug!("{raw_instruction:#X}: Key {first_pressed:#X} stored to V{x_register}");
+                if let Some(first_released) = first_released {
+                    self.registers[x_register] = first_released as u8;
+                    debug!("{raw_instruction:#X}: Key {first_released:#X} stored to V{x_register}");
                 } else {
                     self.program_counter -= 2;
                     debug!("{raw_instruction:#X}: No keys pressed, blocking");
@@ -950,19 +958,24 @@ mod test {
     #[test]
     fn test_fx0a() {
         let program = vec![
-            0xFA, 0x0A // V0 = get_key()
+            0xFA, 0x0A, // V0 = get_key()
+            0x12, 0x02, // Jump to 0x202, i.e. infinite loop
         ];
 
         let mut emulator = Chip8Emulator::new(program, 10);
+        let mut keyboard_state = [false; 16];
 
-        emulator.run_instruction(); // Should block
+        emulator.run_60hz_frame(keyboard_state); // Should block
         assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS);
 
-        emulator.run_instruction(); // Should block
+        keyboard_state[0xF] = true;
+
+        emulator.run_60hz_frame(keyboard_state); // Should still block
         assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS);
 
-        emulator.keyboard_state[0xF] = true;
-        emulator.run_instruction(); // Should continue
+        keyboard_state[0xF] = false;
+
+        emulator.run_60hz_frame(keyboard_state); // Should continue now that the key was released
         assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS + 2);
         assert_eq!(emulator.registers[0xA], 0xF);
     }
