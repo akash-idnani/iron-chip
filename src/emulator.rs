@@ -416,6 +416,12 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: Setting delay timer to V{x_register}");
             }
 
+            // FX18: Sets the sound timer to VX
+            DecodedInstruction { first_nibble: 0xF, nn_8_bit_constant: 0x18, .. } => {
+                self.sound_timer = self.registers[x_register];
+                debug!("{raw_instruction:#X}: Setting sound timer to V{x_register}");
+            }
+
             // FX1E: Adds VX to I. VF is not affected.
             DecodedInstruction { first_nibble: 0xF, nn_8_bit_constant: 0x1E, .. } => {
                 self.index_register += self.registers[x_register] as u16;
