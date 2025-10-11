@@ -422,6 +422,14 @@ impl Chip8Emulator {
                 debug!("{raw_instruction:#X}: Adding register {x_register} to index");
             }
 
+            // FX29: Sets I to the location of the sprite for the character in
+            // VX(only consider the lowest nibble). Characters 0-F (in hexadecimal) are represented by a 4x5 font.
+            DecodedInstruction { first_nibble: 0xF, nn_8_bit_constant: 0x29, .. } => {
+                let lower_nibble = self.registers[x_register] & 0x0F;
+                self.index_register = (0x50 + lower_nibble * 5) as u16;
+                debug!("{raw_instruction:#X}: Setting index register to sprite of character at V{x_register}");
+            }
+
             // FX33: Stores the binary-coded decimal representation of VX, with the hundreds digit in memory
             // at location in I, the tens digit at location I+1, and the ones digit at location I+2.
             DecodedInstruction {first_nibble: 0xF, nn_8_bit_constant: 0x33, ..} => {
@@ -993,6 +1001,20 @@ mod test {
             emulator.run_instruction();
         }
         assert_eq!(emulator.index_register, 0x125);
+    }
+
+    #[test]
+    fn test_fx29() {
+        let program = vec![
+            0xF7, 0x29 // Store sprite 7 at index register
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+
+        emulator.registers[7] = 0xFA; // Top nibble should be ignored
+        emulator.run_instruction();
+
+        assert_eq!(emulator.index_register, 0x50 + 0xA * 5);
     }
 
     #[test]
