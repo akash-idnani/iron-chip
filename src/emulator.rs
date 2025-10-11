@@ -37,6 +37,7 @@ pub struct Chip8Emulator {
     stack_pointer: u8,
     delay_timer: u8,
     sound_timer: u8,
+    keyboard_state: [bool; 16],
     pub display_buffer: [u32; window::WIDTH * window::HEIGHT],
 
     instructions_per_frame: u8,
@@ -78,12 +79,13 @@ impl Chip8Emulator {
             stack_pointer: 0,
             delay_timer: 0,
             sound_timer: 0,
+            keyboard_state: [false; 16],
             display_buffer: [0; window::WIDTH * window::HEIGHT],
             instructions_per_frame,
         }
     }
 
-    pub fn run_60hz_frame(&mut self) {
+    pub fn run_60hz_frame(&mut self, new_keyboard_state: [bool; 16]) {
         debug!("Running 60hz frame");
         if self.delay_timer > 0 {
             self.delay_timer -= 1;
@@ -94,6 +96,8 @@ impl Chip8Emulator {
             self.sound_timer -= 1;
             debug!("Decrementing sound timer: {}", self.sound_timer);
         }
+
+        self.keyboard_state = new_keyboard_state;
 
         for _ in 0..self.instructions_per_frame {
             self.run_instruction();
@@ -347,6 +351,61 @@ impl Chip8Emulator {
 
                 debug!("{raw_instruction:#X}: Drawing sprite at address {:#3X} of height {height} to ({x}, {y}). Collision Detected: {collision_detected}",
                     self.index_register);
+            }
+
+            // EX9E Skips the next instruction if the key stored in VX(only consider the lowest nibble)
+            // is pressed (usually the next instruction is a jump to skip a code block).
+            DecodedInstruction { first_nibble: 0xE, nn_8_bit_constant: 0x9E, .. } => {
+                let key_to_check = self.registers[x_register] & 0x0F;
+                if self.keyboard_state[key_to_check as usize] {
+                    self.program_counter += 2;
+                    debug!("{raw_instruction:#X}: Skipping because Key {key_to_check:#X} is pressed");
+                } else {
+                    debug!("{raw_instruction:#X}: Not skipping because Key {key_to_check:#X} isn't pressed");
+                }
+            }
+
+            // EXA1 Skips the next instruction if the key stored in VX(only consider the lowest nibble)
+            // is not pressed (usually the next instruction is a jump to skip a code block)
+            DecodedInstruction { first_nibble: 0xE, nn_8_bit_constant: 0xA1, .. } => {
+                let key_to_check = self.registers[x_register] & 0x0F;
+                if !self.keyboard_state[key_to_check as usize] {
+                    self.program_counter += 2;
+                    debug!("{raw_instruction:#X}: Skipping because Key {key_to_check:#X} is not pressed");
+                } else {
+                    debug!("{raw_instruction:#X}: Not skipping because Key {key_to_check:#X} is pressed");
+                }
+            }
+
+            // FX07: Sets VX to the value of the delay timer
+            DecodedInstruction { first_nibble: 0xF, nn_8_bit_constant: 0x07, .. } => {
+                self.registers[x_register] = self.delay_timer;
+                debug!("{raw_instruction:#X}: Setting V{x_register} to delay timer");
+            }
+
+            // FX0A: A key press is awaited, and then stored in VX (blocking operation, all instruction
+            // halted until next key event, delay and sound timers should continue processing).
+            DecodedInstruction { first_nibble: 0xF, nn_8_bit_constant: 0x0A, .. } => {
+                let first_pressed = self
+                    .keyboard_state
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(idx, is_pressed)| is_pressed.then_some(idx))
+                    .next();
+
+                if let Some(first_pressed) = first_pressed {
+                    self.registers[x_register] = first_pressed as u8;
+                    debug!("{raw_instruction:#X}: Key {first_pressed:#X} stored to V{x_register}");
+                } else {
+                    self.program_counter -= 2;
+                    debug!("{raw_instruction:#X}: No keys pressed, blocking");
+                }
+            }
+
+            // FX15: Sets the delay timer to VX
+            DecodedInstruction { first_nibble: 0xF, nn_8_bit_constant: 0x15, .. } => {
+                self.delay_timer = self.registers[x_register];
+                debug!("{raw_instruction:#X}: Setting delay timer to V{x_register}");
             }
 
             // FX1E: Adds VX to I. VF is not affected.
@@ -833,6 +892,79 @@ mod test {
             assert_pixel(&emulator, 4 * WIDTH + i, i % 2 == 1);
         }
         assert_pixel(&emulator, 4 * WIDTH + 9, false);
+    }
+
+    #[test]
+    fn test_ex9e() {
+        let program = vec![
+            0xE0, 0x9E, // Skip if key stored in V0 is pressed
+            0xE1, 0x9E, // Skip if key stored in V1 is pressed
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+
+        emulator.registers[0] = 5;
+        emulator.registers[1] = 0xF6; // Top nibble should be ignored
+        emulator.keyboard_state[6] = true;
+
+        emulator.run_instruction();
+        assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS + 2); // Should not have skipped
+
+        emulator.run_instruction();
+        assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS + 6); // Should have skipped
+    }
+
+    #[test]
+    fn test_exa1() {
+        let program = vec![
+            0xE0, 0xA1, // Skip if key stored in V0 is not pressed
+            0xE1, 0xA1, // Skip if key stored in V1 is not pressed
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+
+        emulator.registers[0] = 0xAA; // Top nibble should be ignored
+        emulator.registers[1] = 0xBB;
+        emulator.keyboard_state[0xA] = true;
+
+        emulator.run_instruction();
+        assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS + 2); // Should not have skipped
+
+        emulator.run_instruction();
+        assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS + 6); // Should have skipped
+    }
+
+    #[test]
+    fn test_fx07() {
+        let program = vec![
+            0xF4, 0x07, // Set V4 to delay timer
+        ];
+
+        let mut emulater = Chip8Emulator::new(program, 10);
+        emulater.delay_timer = 0x69;
+
+        emulater.run_instruction();
+        assert_eq!(emulater.registers[4], 0x69);
+    }
+
+    #[test]
+    fn test_fx0a() {
+        let program = vec![
+            0xFA, 0x0A // V0 = get_key()
+        ];
+
+        let mut emulator = Chip8Emulator::new(program, 10);
+
+        emulator.run_instruction(); // Should block
+        assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS);
+
+        emulator.run_instruction(); // Should block
+        assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS);
+
+        emulator.keyboard_state[0xF] = true;
+        emulator.run_instruction(); // Should continue
+        assert_eq!(emulator.program_counter, PROGRAM_START_ADDRESS + 2);
+        assert_eq!(emulator.registers[0xA], 0xF);
     }
 
     #[test]

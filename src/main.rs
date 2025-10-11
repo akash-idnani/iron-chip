@@ -34,13 +34,13 @@ fn main() {
     while window.should_run() {
         let frame_start_time = Instant::now();
 
-        emulator.run_60hz_frame();
+        emulator.run_60hz_frame(window.keyboard_state());
         window.update(&emulator.display_buffer);
 
         let current_runtime = Instant::now().duration_since(frame_start_time);
 
         if current_runtime >= INTERVAL {
-            trace!("WARNING: Exceeded 60Hz Frame! Runtime: {:?}", current_runtime);
+            warn!("WARNING: Exceeded 60Hz Frame! Runtime: {:?}", current_runtime);
         } else {
             sleep(INTERVAL - current_runtime);
         }
